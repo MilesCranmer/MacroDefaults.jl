@@ -14,7 +14,7 @@ jobs:
         with:
           repository: MilesCranmer/DispatchDoctor.jl
           path: host
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
       - name: Run suite against this MacroDefaults
@@ -33,7 +33,7 @@ jobs:
         with:
           repository: MilesCranmer/BorrowChecker.jl
           path: host
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
       - name: Run suite against this MacroDefaults
