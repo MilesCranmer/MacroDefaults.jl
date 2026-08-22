@@ -12,19 +12,25 @@ module MyMacros
 using MacroDefaults
 
 macro mymacro(args...)
-    mode = @something @preference("mymacros_mode") macroparse(args, :mode) "error"
+    mode = @preference("mymacros_mode", "error")
     ...
 end
 
 end
 ```
 
-Precedence reads left to right: the calling package's `LocalPreferences.toml`
-entry beats an explicit `@mymacro mode="warn" ...` option, which beats the
-hardcoded default. `@preference` may only be used inside a macro body (it
-captures `__module__` for you); the underlying function form
-`preference(__module__, key)` remains available, as does
-`macroparse(args, :key)` for extracting one `key=value` macro option.
+`@preference(key, default)` returns the calling package's stored value for
+`key`, or `default` if unset; `deprecated_keys = (...)` migrates old key
+names with a one-time deprecation warning. To also let the call site pass an
+explicit option (`@mymacro mode = "warn" ...`), slot `macroparse` in front:
+
+```julia
+mode = @something macroparse(args, :mode) @preference("mymacros_mode", "error")
+```
+
+`@preference` may only be used inside a macro body (it captures
+`__module__` for you); the underlying function form
+`preference(__module__, key)` remains available.
 
 The preference key lives in the *calling* package's `LocalPreferences.toml`:
 

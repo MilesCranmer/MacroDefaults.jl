@@ -23,6 +23,7 @@ function _uuid(m::Module)
         get!(() -> _try_uuid(m), UUIDS, m)
     end
 end
+
 """
     preference(mod, key; deprecated_keys=()) -> Union{Some{Any}, Nothing}
 
@@ -33,7 +34,9 @@ pick up changed preferences. Apply defaults with `Base.@something`.
 `deprecated_keys` are probed in order when `key` is absent; the first set
 entry wins and emits a `depwarn` (forced, even under `--depwarn=no`).
 """
-function preference(mod::Module, key::String; deprecated_keys::Tuple{Vararg{String}}=())
+function preference(mod::Module, key::String; deprecated_keys = ())
+    deps = deprecated_keys isa Tuple{Vararg{String}} ? deprecated_keys :
+           Tuple(deprecated_keys)
     uuid = _uuid(mod)
     uuid === nothing && return nothing
     local dep_key = nothing
@@ -41,7 +44,7 @@ function preference(mod::Module, key::String; deprecated_keys::Tuple{Vararg{Stri
         get!(PREFS, (uuid, key)) do
             v = load_preference(uuid, key, nothing)
             if v === nothing
-                for dk in deprecated_keys
+                for dk in deps
                     v = load_preference(uuid, dk, nothing)
                     v === nothing || (dep_key = dk; break)
                 end
@@ -55,6 +58,7 @@ function preference(mod::Module, key::String; deprecated_keys::Tuple{Vararg{Stri
         force=true)
     return entry
 end
+
 """
     module_default(mod, key, fallback)
 
@@ -97,7 +101,7 @@ Extract one keyword-style option from macro arguments: scans `args` for
 between a preference and a default so an explicit call-site option beats
 the default but loses to the caller's LocalPreferences.toml entry:
 
-    mode = @something @preference("mymacros_mode") macroparse(args, :mode) "error"
+    mode = @something macroparse(args, :mode) @preference("mymacros_mode", "error")
 
 The right-hand side is returned as-is: literals arrive as values; anything
 else arrives as an unevaluated expression for the host to handle.
@@ -111,17 +115,58 @@ function macroparse(args, key::Symbol)
 end
 
 """
-    @preference(key)
+    @preference(key, [default]; deprecated_keys = ...) -> Any
 
-Sugar for use INSIDE MACRO BODIES: equivalent to
-`preference(__module__, key)` with the calling module captured
-automatically. Works because the escaped `__module__` resolves when the
-enclosing macro expands, at which point it is bound to that macro's
-caller. Anywhere else it raises `UndefVarError`. Returns
-`Union{Some{Any}, Nothing}` like [`preference`](@ref).
+Look up `key` in the calling package's preferences, with the calling module
+captured automatically. MUST be used inside a macro body: the escaped
+`__module__` resolves there to that macro's caller. Anywhere else it raises
+`UndefVarError`.
+
+Returns the plain value: the stored preference if set (a deprecated alias is
+probed per `deprecated_keys`, warning once), else `default`. Matches the
+positional-default convention of `Preferences.@load_preference`; the default
+may also be spelled `default = ...`, and `deprecated_keys` accepts any
+iterable of strings.
+
+Caveat: because the result is a plain value, composing this with
+`Base.@something` would treat a legitimate `false` as missing. For Bool
+knobs or layered defaults, call [`preference`](@ref) and
+[`module_default`](@ref) directly.
 """
-macro preference(key)
-    esc(:(preference(__module__, $key)))
+macro preference(args...)
+    key = nothing
+    default = nothing
+    deps = ()
+    absorb! = function (name::Symbol, val)
+        name === :default && (default = val; return)
+        name === :deprecated_keys && (deps = val; return)
+        error("@preference: unknown keyword `$(name)`")
+    end
+    for a in args
+        if a isa Expr && a.head === :parameters
+            for p in a.args
+                p isa Expr && p.head === :kw ||
+                    error("@preference: unexpected `$p`")
+                absorb!(p.args[1], p.args[2])
+            end
+        elseif a isa Expr && (a.head === :kw || a.head === :(=)) &&
+               a.args[1] in (:default, :deprecated_keys)
+            absorb!(a.args[1], a.args[2])
+        elseif key === nothing
+            key = a
+        elseif default === nothing
+            default = a
+        else
+            error("@preference: unexpected argument `$(a)`")
+        end
+    end
+    key === nothing && error("@preference: missing preference key")
+    v = gensym("prefval")
+    lookup = :(preference(__module__, $key; deprecated_keys = $deps))
+    esc(quote
+        $v = $lookup
+        $v === nothing ? $default : something($v)
+    end)
 end
 
 # Unexported, test-only. Not part of the public contract.
@@ -133,4 +178,5 @@ function _reset_for_testing!()
         empty!(READ)
     end
 end
+
 end
