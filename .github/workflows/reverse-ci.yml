@@ -1,0 +1,43 @@
+name: Reverse CI
+# Runs the full test suites of DispatchDoctor.jl and BorrowChecker.jl
+# against this checkout of MacroDefaults.jl. Enable push/schedule triggers
+# only after both hosts have cut over (Parts 2 and 3 of the plan).
+on:
+  workflow_dispatch:
+
+jobs:
+  dispatch-doctor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: MilesCranmer/DispatchDoctor.jl
+          path: host
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Run suite against this MacroDefaults
+        working-directory: host
+        env:
+          DISPATCH_DOCTOR_TEST: unit
+        run: |
+          julia --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.develop(path=joinpath(pwd(), "..")); Pkg.instantiate()'
+          julia --project=test -t 8 test/runtests.jl
+
+  borrow-checker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: MilesCranmer/BorrowChecker.jl
+          path: host
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Run suite against this MacroDefaults
+        working-directory: host
+        run: |
+          julia --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.develop(path=joinpath(pwd(), "..")); Pkg.instantiate()'
+          julia --project=test -t 8 test/runtests.jl
