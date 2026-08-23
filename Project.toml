@@ -1,7 +1,7 @@
 name = "MacroDefaults"
 uuid = "192f748d-8cb7-439b-c0df-f093054984ae"
 authors = ["MilesCranmer <miles.cranmer@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
